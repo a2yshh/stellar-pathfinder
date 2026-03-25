@@ -1,4 +1,4 @@
-# Stellar Pathfinder 🚀
+# Stellar Pathfinder 
 ### AI Search Algorithm Visualizer
  
 An interactive space-themed web app that visualizes how AI search algorithms navigate a star map to find the optimal route between planets — with an adversarial enemy ship that tries to block your path.
