@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stellar Pathfinder — AI Search Visualizer</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Share+Tech+Mono&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #020818;
+    --bg2: #050e22;
+    --bg3: #0a1628;
+    --panel: rgba(8,18,40,0.92);
+    --border: rgba(100,160,255,0.18);
+    --border2: rgba(100,160,255,0.35);
+    --accent: #4fa3ff;
+    --accent2: #7b5fff;
+    --gold: #ffd166;
+    --green: #06d6a0;
+    --red: #ef476f;
+    --orange: #ff9f43;
+    --text: #c8d8f0;
+    --text2: #7090b8;
+    --visited: rgba(79,163,255,0.22);
+    --frontier: rgba(123,95,255,0.35);
+    --path: rgba(255,209,102,0.9);
+    --enemy: rgba(239,71,111,0.85);
+    --star-size: 80px;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* ===== STARFIELD BACKGROUND ===== */
+  #starfield {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  }
+
+  /* ===== NEBULA OVERLAY ===== */
+  .nebula {
+    position: fixed; border-radius: 50%; filter: blur(80px);
+    pointer-events: none; z-index: 0; animation: nebula-drift 20s ease-in-out infinite alternate;
+  }
+  .nebula-1 { width:600px;height:400px;top:-100px;left:-100px;background:radial-gradient(ellipse,rgba(79,163,255,0.06),transparent 70%); }
+  .nebula-2 { width:500px;height:500px;bottom:0;right:-100px;background:radial-gradient(ellipse,rgba(123,95,255,0.07),transparent 70%);animation-delay:-10s; }
+  .nebula-3 { width:400px;height:300px;top:40%;left:30%;background:radial-gradient(ellipse,rgba(6,214,160,0.04),transparent 70%);animation-delay:-5s; }
+  @keyframes nebula-drift { to { transform: translate(30px, 20px) scale(1.05); } }
+
+  /* ===== LAYOUT ===== */
+  #app { position:relative; z-index:1; display:grid; grid-template-columns:300px 1fr 340px; grid-template-rows:auto 1fr; min-height:100vh; gap:0; }
+
+  /* ===== HEADER ===== */
+  header {
+    grid-column: 1/-1;
+    padding: 16px 28px;
+    background: rgba(2,8,24,0.8);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 20px;
+    backdrop-filter: blur(12px);
+  }
+  .logo { font-family: 'Orbitron', monospace; font-size: 22px; font-weight: 900; letter-spacing: 2px; }
+  .logo span { color: var(--accent); }
+  .tagline { font-size: 11px; color: var(--text2); letter-spacing: 1.5px; font-family: 'Share Tech Mono', monospace; text-transform: uppercase; }
+  .header-controls { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+
+  /* ===== LEFT PANEL (Controls) ===== */
+  #controls-panel {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    padding: 20px 16px;
+    display: flex; flex-direction: column; gap: 18px;
+    overflow-y: auto; backdrop-filter: blur(12px);
+  }
+
+  .ctrl-section { display: flex; flex-direction: column; gap: 8px; }
+  .ctrl-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px; letter-spacing: 2px; color: var(--text2);
+    text-transform: uppercase; padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  select, .select-custom {
+    background: rgba(10,22,50,0.8);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    width: 100%;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%234fa3ff' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  select:focus, select:hover { border-color: var(--accent); outline: none; box-shadow: 0 0 0 2px rgba(79,163,255,0.15); }
+  select option { background: #0a1628; }
+
+  /* Toggle Switch */
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+  .toggle-label { font-size: 13px; color: var(--text); }
+  .toggle-sub { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .toggle-wrap { position: relative; }
+  .toggle-wrap input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-track {
+    display: block; width: 46px; height: 24px; background: rgba(255,255,255,0.08);
+    border: 1px solid var(--border2); border-radius: 12px; cursor: pointer;
+    transition: background 0.3s, border-color 0.3s; position: relative;
+  }
+  .toggle-track::after {
+    content:''; position:absolute; top:3px; left:3px;
+    width:16px; height:16px; border-radius:50%;
+    background: var(--text2); transition: transform 0.3s, background 0.3s;
+  }
+  .toggle-wrap input:checked + .toggle-track { background: rgba(239,71,111,0.3); border-color: var(--red); }
+  .toggle-wrap input:checked + .toggle-track::after { transform: translateX(22px); background: var(--red); }
+
+  /* Speed slider */
+  .speed-row { display: flex; align-items: center; gap: 10px; }
+  .speed-row input[type=range] {
+    flex:1; -webkit-appearance:none; height:3px;
+    background: linear-gradient(to right, var(--accent) 0%, var(--accent) var(--val,50%), rgba(100,160,255,0.2) var(--val,50%));
+    border-radius: 2px; cursor: pointer;
+  }
+  .speed-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance:none; width:14px; height:14px;
+    border-radius:50%; background:var(--accent); cursor:pointer;
+    border:2px solid rgba(79,163,255,0.5);
+  }
+
+  /* Buttons */
+  .btn {
+    padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border2);
+    background: rgba(79,163,255,0.08); color: var(--accent);
+    font-family: 'Share Tech Mono', monospace; font-size: 12px;
+    letter-spacing: 1px; cursor: pointer;
+    transition: all 0.2s; text-transform: uppercase;
+  }
+  .btn:hover { background: rgba(79,163,255,0.18); border-color: var(--accent); box-shadow: 0 0 12px rgba(79,163,255,0.2); }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary { background: rgba(79,163,255,0.15); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: rgba(79,163,255,0.28); box-shadow: 0 0 20px rgba(79,163,255,0.3); }
+  .btn-danger { border-color: rgba(239,71,111,0.5); color: var(--red); background: rgba(239,71,111,0.07); }
+  .btn-danger:hover { background: rgba(239,71,111,0.15); border-color: var(--red); box-shadow: 0 0 12px rgba(239,71,111,0.2); }
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row .btn { flex: 1; text-align: center; }
+
+  /* Stats mini */
+  .stats-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-mini-card {
+    background: rgba(79,163,255,0.06); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; text-align: center;
+  }
+  .stat-mini-val { font-family: 'Orbitron', monospace; font-size: 18px; font-weight: 700; color: var(--accent); }
+  .stat-mini-lbl { font-size: 10px; color: var(--text2); margin-top: 2px; letter-spacing: 1px; }
+
+  /* Legend */
+  .legend { display: flex; flex-direction: column; gap: 6px; }
+  .legend-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text2); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ===== CANVAS ===== */
+  #canvas-wrap {
+    position: relative; overflow: hidden;
+    background: transparent;
+  }
+  #graph-canvas { display: block; width: 100%; height: 100%; }
+
+  /* ===== RIGHT PANEL (Info) ===== */
+  #info-panel {
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    padding: 20px 18px;
+    display: flex; flex-direction: column; gap: 16px;
+    overflow-y: auto; backdrop-filter: blur(12px);
+  }
+
+  .algo-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(79,163,255,0.12); border: 1px solid var(--border2);
+    border-radius: 20px; padding: 4px 12px;
+    font-family: 'Share Tech Mono', monospace; font-size: 11px;
+    color: var(--accent); letter-spacing: 1px;
+  }
+  .algo-badge::before { content:''; width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse-dot 1.5s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.7)} }
+
+  .info-title { font-family: 'Orbitron', monospace; font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .info-complexity {
+    display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 2px;
+  }
+  .badge { padding: 3px 8px; border-radius: 4px; font-family:'Share Tech Mono',monospace; font-size: 11px; }
+  .badge-time { background: rgba(255,209,102,0.12); color: var(--gold); border: 1px solid rgba(255,209,102,0.25); }
+  .badge-space { background: rgba(6,214,160,0.1); color: var(--green); border: 1px solid rgba(6,214,160,0.2); }
+  .badge-optimal { background: rgba(79,163,255,0.1); color: var(--accent); border: 1px solid rgba(79,163,255,0.2); }
+  .badge-complete { background: rgba(123,95,255,0.1); color: var(--accent2); border: 1px solid rgba(123,95,255,0.2); }
+
+  .info-desc {
+    font-size: 13px; line-height: 1.7; color: var(--text);
+    background: rgba(79,163,255,0.04); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px;
+  }
+
+  .step-log {
+    flex: 1; min-height: 160px; max-height: 280px;
+    background: rgba(2,8,20,0.6); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; overflow-y: auto;
+    font-family: 'Share Tech Mono', monospace; font-size: 11px;
+    color: var(--text2); line-height: 1.8;
+  }
+  .step-log .log-entry { padding: 1px 0; border-bottom: 1px solid rgba(100,160,255,0.05); }
+  .log-visit { color: var(--accent); }
+  .log-frontier { color: var(--accent2); }
+  .log-path { color: var(--gold); }
+  .log-enemy { color: var(--red); }
+  .log-found { color: var(--green); }
+  .log-cost { color: var(--orange); }
+
+  .enemy-status {
+    background: rgba(239,71,111,0.08); border: 1px solid rgba(239,71,111,0.25);
+    border-radius: 8px; padding: 10px 12px; display: none;
+  }
+  .enemy-status.active { display: block; }
+  .enemy-status-title { font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--red); letter-spacing:2px; text-transform:uppercase; margin-bottom:6px; }
+  .enemy-status-text { font-size: 12px; color: var(--text); line-height: 1.6; }
+
+  /* ===== STATUS BAR ===== */
+  #status-bar {
+    grid-column: 1/-1;
+    padding: 8px 20px;
+    background: rgba(2,8,24,0.6);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+    font-family: 'Share Tech Mono', monospace; font-size: 11px;
+    color: var(--text2);
+  }
+  .status-dot { width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse-dot 2s infinite; }
+  .status-dot.busy { background:var(--gold); }
+  .status-dot.error { background:var(--red);animation:none; }
+  #status-msg { color: var(--text); }
+
+  /* ===== TOOLTIP ===== */
+  #tooltip {
+    position: fixed; pointer-events: none; z-index: 100;
+    background: rgba(5,14,34,0.95); border: 1px solid var(--border2);
+    border-radius: 8px; padding: 8px 12px;
+    font-size: 12px; color: var(--text); backdrop-filter: blur(8px);
+    display: none; max-width: 180px;
+  }
+  #tooltip .tt-name { font-family:'Orbitron',monospace; font-size:13px; color:#fff; margin-bottom:3px; }
+  #tooltip .tt-row { display:flex;justify-content:space-between;gap:12px;color:var(--text2); }
+  #tooltip .tt-val { color:var(--accent); font-family:'Share Tech Mono',monospace; }
+
+  /* ===== ANIMATIONS ===== */
+  @keyframes ship-pulse { 0%,100%{filter:drop-shadow(0 0 6px var(--accent))} 50%{filter:drop-shadow(0 0 14px var(--accent))} }
+  @keyframes enemy-pulse { 0%,100%{filter:drop-shadow(0 0 6px var(--red))} 50%{filter:drop-shadow(0 0 14px var(--red))} }
+  @keyframes found-flash { 0%{opacity:0;transform:scale(0.5)} 50%{opacity:1;transform:scale(1.3)} 100%{opacity:1;transform:scale(1)} }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(100,160,255,0.2); border-radius: 2px; }
+
+  /* DLS depth input */
+  .depth-row { display: flex; align-items: center; gap: 8px; }
+  .depth-row input[type=number] {
+    width: 60px; background: rgba(10,22,50,0.8); border: 1px solid var(--border2);
+    color: var(--text); font-family:'Share Tech Mono',monospace; font-size:13px;
+    padding: 6px 8px; border-radius: 6px; text-align: center;
+  }
+  .depth-row input[type=number]:focus { outline:none; border-color:var(--accent); }
+  .depth-row label { font-size:12px; color:var(--text2); }
+
+  #dls-control { display: none; }
+
+  .path-cost-display {
+    background: rgba(255,209,102,0.08); border: 1px solid rgba(255,209,102,0.2);
+    border-radius: 8px; padding: 10px 12px; display: none;
+  }
+  .path-cost-display.show { display: block; }
+  .pcd-label { font-family:'Share Tech Mono',monospace; font-size:10px; color:var(--gold); letter-spacing:2px; text-transform:uppercase; margin-bottom:4px; }
+  .pcd-route { font-size:11px; color:var(--text); line-height:1.8; font-family:'Share Tech Mono',monospace; }
+  .pcd-total { font-family:'Orbitron',monospace; font-size:16px; color:var(--gold); margin-top:4px; }
+
+  /* Mode indicator */
+  .mode-indicator {
+    padding: 6px 12px; border-radius: 6px; font-family:'Share Tech Mono',monospace;
+    font-size: 11px; display: flex; align-items: center; gap: 6px;
+    border: 1px solid var(--border);
+  }
+  .mode-dot { width:6px;height:6px;border-radius:50%; }
+</style>
+</head>
+<body>
+
+<canvas id="starfield"></canvas>
+<div class="nebula nebula-1"></div>
+<div class="nebula nebula-2"></div>
+<div class="nebula nebula-3"></div>
+
+<div id="app">
+
+  <!-- HEADER -->
+  <header>
+    <div>
+      <div class="logo">STELLAR <span>PATHFINDER</span></div>
+      <div class="tagline">AI Search Algorithm Visualizer · Units 1–3</div>
+    </div>
+    <div class="header-controls" style="display:flex;align-items:center;gap:24px;">
+      <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--accent);">AYUSH SRIVASTAVA <span style="color:var(--text2)">· RA2411027010140</span></span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--accent);">K. SAI HAMSIKA <span style="color:var(--text2)">· RA2411027010107</span></span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--accent);">N. TIRTHAPOOJA <span style="color:var(--text2)">· RA2411027010131</span></span>
+    </div>
+  </header>
+
+  <!-- LEFT CONTROLS PANEL -->
+  <div id="controls-panel">
+
+    <div class="ctrl-section">
+      <div class="ctrl-label">Search Algorithm</div>
+      <select id="algo-select" onchange="onAlgoChange()">
+        <option value="bfs">BFS — Breadth-First Search</option>
+        <option value="dfs">DFS — Depth-First Search</option>
+        <option value="ucs">UCS — Uniform Cost Search</option>
+        <option value="dls">DLS — Depth-Limited Search</option>
+        <option value="astar">A* — A-Star Search</option>
+      </select>
+      <div id="dls-control" class="depth-row">
+        <label>Depth Limit:</label>
+        <input type="number" id="dls-depth" value="4" min="1" max="10">
+      </div>
+    </div>
+
+    <div class="ctrl-section">
+      <div class="ctrl-label">Source Star</div>
+      <select id="source-select" onchange="onNodeSelectChange()">
+      </select>
+    </div>
+
+    <div class="ctrl-section">
+      <div class="ctrl-label">Destination Star</div>
+      <select id="dest-select" onchange="onNodeSelectChange()">
+      </select>
+    </div>
+
+    <div class="ctrl-section">
+      <div class="ctrl-label">Enemy Ship</div>
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-label">Interceptor Active</div>
+          <div class="toggle-sub">Minimax adversary</div>
+        </div>
+        <label class="toggle-wrap">
+          <input type="checkbox" id="enemy-toggle" onchange="onEnemyToggle()">
+          <span class="toggle-track"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="ctrl-section">
+      <div class="ctrl-label">Visualization Speed</div>
+      <div class="speed-row">
+        <span style="font-size:10px;color:var(--text2)">SLOW</span>
+        <input type="range" id="speed-slider" min="1" max="10" value="5" oninput="onSpeedChange(this)">
+        <span style="font-size:10px;color:var(--text2)">FAST</span>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="runAlgorithm()">▶ LAUNCH</button>
+      <button class="btn btn-danger" onclick="resetViz()">↺ RESET</button>
+    </div>
+
+    <div class="ctrl-section">
+      <div class="ctrl-label">Live Stats</div>
+      <div class="stats-mini">
+        <div class="stat-mini-card">
+          <div class="stat-mini-val" id="stat-visited">0</div>
+          <div class="stat-mini-lbl">Visited</div>
+        </div>
+        <div class="stat-mini-card">
+          <div class="stat-mini-val" id="stat-frontier">0</div>
+          <div class="stat-mini-lbl">Frontier</div>
+        </div>
+        <div class="stat-mini-card">
+          <div class="stat-mini-val" id="stat-path">—</div>
+          <div class="stat-mini-lbl">Path Len</div>
+        </div>
+        <div class="stat-mini-card">
+          <div class="stat-mini-val" id="stat-cost">—</div>
+          <div class="stat-mini-lbl">Cost</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ctrl-section">
+      <div class="ctrl-label">Legend</div>
+      <div class="legend">
+        <div class="legend-row"><div class="legend-dot" style="background:var(--accent)"></div> Frontier / Queued</div>
+        <div class="legend-row"><div class="legend-dot" style="background:rgba(79,163,255,0.4)"></div> Visited node</div>
+        <div class="legend-row"><div class="legend-dot" style="background:var(--gold)"></div> Optimal path</div>
+        <div class="legend-row"><div class="legend-dot" style="background:var(--green)"></div> Source / Dest</div>
+        <div class="legend-row"><div class="legend-dot" style="background:var(--red)"></div> Enemy ship</div>
+        <div class="legend-row"><div class="legend-dot" style="background:var(--orange)"></div> Edge weight</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- CANVAS -->
+  <div id="canvas-wrap">
+    <canvas id="graph-canvas"></canvas>
+  </div>
+
+  <!-- RIGHT INFO PANEL -->
+  <div id="info-panel">
+
+    <div>
+      <div class="algo-badge" id="algo-badge">BFS</div>
+    </div>
+
+    <div>
+      <div class="info-title" id="info-title">Breadth-First Search</div>
+      <div class="info-complexity" id="info-complexity">
+        <span class="badge badge-time">Time: O(b^d)</span>
+        <span class="badge badge-space">Space: O(b^d)</span>
+        <span class="badge badge-optimal">Optimal: Yes*</span>
+        <span class="badge badge-complete">Complete: Yes</span>
+      </div>
+    </div>
+
+    <div class="info-desc" id="info-desc">
+      BFS explores all neighbors at the current depth before moving deeper — like ripples expanding from a stone dropped in water. Your spacecraft first visits all stars one jump away, then two jumps, etc. Guarantees the shortest path in unweighted graphs. Uses a <strong>queue (FIFO)</strong>.
+    </div>
+
+    <div class="enemy-status" id="enemy-status">
+      <div class="enemy-status-title">⚠ Interceptor Ship Active</div>
+      <div class="enemy-status-text" id="enemy-status-text">
+        The enemy interceptor uses Minimax strategy to position itself optimally. It anticipates your route and moves to block the most critical path nodes, forcing your ship to find an alternate route.
+      </div>
+    </div>
+
+    <div class="ctrl-section">
+      <div class="ctrl-label">Mission Log</div>
+      <div class="step-log" id="step-log">
+        <div class="log-entry" style="color:var(--text2)">— Awaiting launch sequence —</div>
+      </div>
+    </div>
+
+    <div class="path-cost-display" id="path-cost-display">
+      <div class="pcd-label">Route Found</div>
+      <div class="pcd-route" id="pcd-route"></div>
+      <div class="pcd-total" id="pcd-total"></div>
+    </div>
+
+  </div>
+
+  <!-- STATUS BAR -->
+  <div id="status-bar">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-msg">System online. Select algorithm and stars, then launch.</span>
+    <span style="margin-left:auto;display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
+      <span style="color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:0.5px;">
+        AYUSH SRIVASTAVA <span style="color:var(--text2)">· RA2411027010140</span>
+      </span>
+      <span style="color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:0.5px;">
+        K. SAI HAMSIKA <span style="color:var(--text2)">· RA2411027010107</span>
+      </span>
+      <span style="color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:0.5px;">
+        N. TIRTHAPOOJA <span style="color:var(--text2)">· RA2411027010131</span>
+      </span>
+    </span>
+  </div>
+
+</div>
+
+<div id="tooltip">
+  <div class="tt-name" id="tt-name"></div>
+  <div class="tt-row"><span>Type</span><span class="tt-val" id="tt-type"></span></div>
+  <div class="tt-row"><span>Edges</span><span class="tt-val" id="tt-edges"></span></div>
+  <div class="tt-row" id="tt-hrow"><span>Heuristic</span><span class="tt-val" id="tt-hval"></span></div>
+</div>
+
+<script>
+// ===== STARFIELD =====
+const sfCanvas = document.getElementById('starfield');
+const sfCtx = sfCanvas.getContext('2d');
+let stars = [];
+function initStars() {
+  sfCanvas.width = window.innerWidth;
+  sfCanvas.height = window.innerHeight;
+  stars = Array.from({length: 220}, () => ({
+    x: Math.random()*sfCanvas.width,
+    y: Math.random()*sfCanvas.height,
+    r: Math.random()*1.4+0.2,
+    alpha: Math.random()*0.7+0.3,
+    speed: Math.random()*0.003+0.001,
+    phase: Math.random()*Math.PI*2
+  }));
+}
+function drawStars(t) {
+  sfCtx.clearRect(0,0,sfCanvas.width,sfCanvas.height);
+  stars.forEach(s => {
+    const a = s.alpha*(0.6+0.4*Math.sin(t*s.speed+s.phase));
+    sfCtx.beginPath();
+    sfCtx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    sfCtx.fillStyle = `rgba(200,220,255,${a})`;
+    sfCtx.fill();
+  });
+  requestAnimationFrame(drawStars);
+}
+initStars();
+requestAnimationFrame(drawStars);
+window.addEventListener('resize', () => { initStars(); resizeCanvas(); });
+
+// ===== GRAPH DATA =====
+const NODES = [
+  { id:0, name:'Sol Prime',   type:'star',   x:0.18, y:0.28, color:'#ffd166', size:22 },
+  { id:1, name:'Arcturus',    type:'star',   x:0.38, y:0.15, color:'#ff8c42', size:18 },
+  { id:2, name:'Vega Station',type:'station',x:0.62, y:0.12, color:'#4fa3ff', size:16 },
+  { id:3, name:'Rigel Base',  type:'star',   x:0.82, y:0.22, color:'#aef6ff', size:20 },
+  { id:4, name:'Nebula-7',    type:'nebula', x:0.25, y:0.52, color:'#b388ff', size:17 },
+  { id:5, name:'Centauri',    type:'star',   x:0.50, y:0.42, color:'#ffee99', size:19 },
+  { id:6, name:'Pulsar X',    type:'pulsar', x:0.75, y:0.48, color:'#06d6a0', size:15 },
+  { id:7, name:'Dark Rift',   type:'void',   x:0.15, y:0.72, color:'#7b5fff', size:16 },
+  { id:8, name:'Andromeda',   type:'star',   x:0.42, y:0.72, color:'#ff9f43', size:21 },
+  { id:9, name:'Nova Core',   type:'pulsar', x:0.68, y:0.68, color:'#ff6b9d', size:17 },
+  { id:10,name:'Quasar Ring', type:'quasar', x:0.88, y:0.72, color:'#4fa3ff', size:18 },
+  { id:11,name:'Void Gate',   type:'void',   x:0.33, y:0.88, color:'#b388ff', size:15 },
+  { id:12,name:'End Star',    type:'star',   x:0.72, y:0.88, color:'#ffd166', size:22 },
+];
+
+const EDGES = [
+  [0,1,4],[0,4,3],[0,7,6],
+  [1,2,5],[1,5,4],[1,4,2],
+  [2,3,3],[2,5,6],[2,6,4],
+  [3,6,5],[3,10,7],
+  [4,5,3],[4,7,4],[4,8,5],
+  [5,6,4],[5,8,3],[5,9,5],
+  [6,9,3],[6,10,6],
+  [7,8,5],[7,11,4],
+  [8,9,4],[8,11,3],[8,12,6],
+  [9,10,4],[9,12,5],
+  [10,12,4],
+  [11,12,5],
+];
+
+// Adjacency list
+const adj = Array.from({length:NODES.length},()=>[]);
+EDGES.forEach(([a,b,w]) => { adj[a].push({to:b,w}); adj[b].push({to:a,w}); });
+
+// ===== CANVAS SETUP =====
+const cvs = document.getElementById('graph-canvas');
+const ctx = cvs.getContext('2d');
+let W, H;
+function resizeCanvas() {
+  const wrap = document.getElementById('canvas-wrap');
+  W = wrap.clientWidth; H = wrap.clientHeight;
+  cvs.width = W; cvs.height = H;
+  drawGraph();
+}
+function nodePos(n) { return { x: n.x*W, y: n.y*H }; }
+
+// ===== VIZ STATE =====
+let vizState = {
+  visited: new Set(),
+  frontier: new Set(),
+  pathEdges: [],
+  pathNodes: [],
+  enemyNode: null,
+  blockedEdges: new Set(),
+  currentStep: null,
+  running: false,
+  done: false
+};
+
+// ===== DRAW =====
+function drawGraph() {
+  if(!W||!H) return;
+  ctx.clearRect(0,0,W,H);
+
+  const src = +document.getElementById('source-select').value;
+  const dst = +document.getElementById('dest-select').value;
+
+  // Draw edges
+  EDGES.forEach(([a,b,w]) => {
+    const pa = nodePos(NODES[a]), pb = nodePos(NODES[b]);
+    const key = `${Math.min(a,b)}-${Math.max(a,b)}`;
+    const isPath = vizState.pathEdges.some(([x,y])=>(x===a&&y===b)||(x===b&&y===a));
+    const isBlocked = vizState.blockedEdges.has(key);
+
+    ctx.beginPath();
+    ctx.moveTo(pa.x,pa.y);
+    ctx.lineTo(pb.x,pb.y);
+
+    if(isPath) {
+      ctx.strokeStyle='rgba(255,209,102,0.85)';
+      ctx.lineWidth=3;
+      ctx.setLineDash([]);
+    } else if(isBlocked) {
+      ctx.strokeStyle='rgba(239,71,111,0.4)';
+      ctx.lineWidth=1.5;
+      ctx.setLineDash([4,4]);
+    } else {
+      ctx.strokeStyle='rgba(100,160,255,0.15)';
+      ctx.lineWidth=1;
+      ctx.setLineDash([]);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Weight label
+    const mx=(pa.x+pb.x)/2, my=(pa.y+pb.y)/2;
+    const algo = document.getElementById('algo-select').value;
+    if(algo==='ucs'||algo==='astar') {
+      ctx.font='10px Share Tech Mono,monospace';
+      ctx.fillStyle=isPath?'rgba(255,209,102,0.9)':'rgba(255,159,67,0.6)';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText(w,mx,my);
+    }
+  });
+
+  // Draw nodes
+  NODES.forEach(n => {
+    const p = nodePos(n);
+    const isVisited = vizState.visited.has(n.id);
+    const isFrontier = vizState.frontier.has(n.id);
+    const isPath = vizState.pathNodes.includes(n.id);
+    const isSrc = n.id===src, isDst = n.id===dst;
+    const isCurrent = vizState.currentStep===n.id;
+    const isEnemy = vizState.enemyNode===n.id;
+
+    // Glow ring
+    if(isFrontier||isCurrent||isEnemy||isSrc||isDst) {
+      const glowColor = isEnemy?'rgba(239,71,111,0.3)':isSrc||isDst?'rgba(6,214,160,0.3)':'rgba(79,163,255,0.25)';
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,n.size+8,0,Math.PI*2);
+      ctx.fillStyle=glowColor;
+      ctx.fill();
+    }
+
+    // Node body
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,n.size,0,Math.PI*2);
+    let fill;
+    if(isEnemy) fill='rgba(239,71,111,0.9)';
+    else if(isPath) fill=n.color;
+    else if(isSrc||isDst) fill=n.color;
+    else if(isCurrent) { fill=n.color; }
+    else if(isVisited) fill='rgba(79,163,255,0.35)';
+    else fill=`${n.color}33`;
+    ctx.fillStyle=fill;
+    ctx.fill();
+
+    // Border
+    ctx.beginPath();
+    ctx.arc(p.x,p.y,n.size,0,Math.PI*2);
+    if(isEnemy) ctx.strokeStyle='var(--red)';
+    else if(isSrc||isDst) ctx.strokeStyle='#06d6a0';
+    else if(isPath) ctx.strokeStyle=n.color;
+    else if(isFrontier) ctx.strokeStyle='rgba(79,163,255,0.9)';
+    else ctx.strokeStyle=`${n.color}55`;
+    ctx.lineWidth = isSrc||isDst||isEnemy||isPath?2.5:1;
+    ctx.stroke();
+
+    // Type icon
+    const icon = {star:'★',station:'◈',nebula:'⬟',pulsar:'⊕',void:'◉',quasar:'◎'}[n.type]||'•';
+    ctx.font=`${Math.max(10,n.size*0.75)}px sans-serif`;
+    ctx.fillStyle=isEnemy?'#fff':isVisited&&!isPath?'rgba(200,220,255,0.5)':'rgba(255,255,255,0.9)';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText(icon,p.x,p.y);
+
+    // Name label
+    ctx.font=isSrc||isDst||isEnemy?'bold 11px Orbitron,monospace':'10px Share Tech Mono,monospace';
+    ctx.fillStyle=isEnemy?'rgba(239,71,111,0.9)':isSrc||isDst?'rgba(6,214,160,0.9)':isPath?n.color:'rgba(180,200,240,0.7)';
+    ctx.textAlign='center';
+    ctx.textBaseline='top';
+    ctx.fillText(n.name,p.x,p.y+n.size+4);
+
+    // SRC / DST badge
+    if(isSrc||isDst) {
+      ctx.font='9px Share Tech Mono,monospace';
+      ctx.fillStyle='rgba(6,214,160,1)';
+      ctx.textBaseline='bottom';
+      ctx.fillText(isSrc?'[SRC]':'[DST]',p.x,p.y-n.size-3);
+    }
+
+    // Enemy badge
+    if(isEnemy) {
+      ctx.font='bold 9px Share Tech Mono,monospace';
+      ctx.fillStyle='rgba(239,71,111,1)';
+      ctx.textBaseline='bottom';
+      ctx.fillText('[ENEMY]',p.x,p.y-n.size-3);
+    }
+  });
+
+  // Frontier numbers (BFS/DFS)
+  if(vizState.frontier.size>0) {
+    let i=1;
+    vizState.frontier.forEach(id => {
+      const p=nodePos(NODES[id]);
+      ctx.font='bold 9px Share Tech Mono,monospace';
+      ctx.fillStyle='rgba(79,163,255,0.9)';
+      ctx.textAlign='right';
+      ctx.textBaseline='top';
+      ctx.fillText(i++,p.x+NODES[id].size,p.y-NODES[id].size);
+    });
+  }
+}
+
+// ===== POPULATE DROPDOWNS =====
+function populateDropdowns() {
+  const ss = document.getElementById('source-select');
+  const ds = document.getElementById('dest-select');
+  ss.innerHTML = ds.innerHTML = '';
+  NODES.forEach(n => {
+    ss.innerHTML += `<option value="${n.id}">${n.name}</option>`;
+    ds.innerHTML += `<option value="${n.id}">${n.name}</option>`;
+  });
+  ss.value = 0;
+  ds.value = 12;
+}
+
+// ===== ALGORITHM INFO =====
+const ALGO_INFO = {
+  bfs: {
+    name:'Breadth-First Search', badge:'BFS',
+    time:'O(b^d)', space:'O(b^d)', optimal:'Yes*', complete:'Yes',
+    desc:'BFS explores the galaxy level by level — all stars 1 jump away, then 2, then 3. Like ripples expanding from your launch point. Uses a <b>queue (FIFO)</b> to track which stars to visit next. Guarantees the path with fewest hops. In space: great when all routes cost the same!',
+    enemy:'The enemy ship tracks BFS\'s predictable wave-expansion. It positions on high-connectivity nodes between source and destination, knowing BFS will find the shortest hop-count path. It blocks the most reachable node on your probable route.'
+  },
+  dfs: {
+    name:'Depth-First Search', badge:'DFS',
+    time:'O(b^m)', space:'O(bm)', optimal:'No', complete:'No*',
+    desc:'DFS is bold and reckless — it picks one direction and flies as deep as possible before backtracking. Uses a <b>stack (LIFO)</b>. Your ship will dive into distant stars first, then backtrack if it hits a dead end. Not optimal, but uses very little memory!',
+    enemy:'DFS creates chaotic, unpredictable routes. The enemy ship can\'t easily anticipate your path but tries to block the first deep branch your ship commits to. It uses a greedy heuristic to intercept the most likely depth-first direction.'
+  },
+  ucs: {
+    name:'Uniform Cost Search', badge:'UCS',
+    time:'O(b^(1+C*/ε))', space:'O(b^(1+C*/ε))', optimal:'Yes', complete:'Yes',
+    desc:'UCS is the careful navigator — it always expands the <b>cheapest cumulative cost</b> path first. Uses a <b>priority queue</b> ordered by path cost. Edge weights (shown on links) represent fuel cost. Your ship finds the absolute minimum-cost route, not just fewest hops!',
+    enemy:'The interceptor calculates the cheapest path and positions itself on the minimum-cost edge. It exploits the fact that UCS must traverse high-cost edges when cheaper alternatives are blocked. Watch it claim chokepoint nodes with high traffic!'
+  },
+  dls: {
+    name:'Depth-Limited Search', badge:'DLS',
+    time:'O(b^l)', space:'O(bl)', optimal:'No', complete:'No',
+    desc:'DLS is DFS with a <b>depth limit</b> — your ship can only travel a maximum number of jumps. If the destination is beyond the limit, the mission fails. Set the depth limit and watch what happens! Useful when we know approximately how far the destination is.',
+    enemy:'The enemy ship exploits DLS\'s range constraint. It positions itself near the depth boundary — forcing your ship to either get blocked or waste depth going around. If the limit is low, it can make the destination completely unreachable!'
+  },
+  astar: {
+    name:'A* Search', badge:'A★',
+    time:'O(b^d)', space:'O(b^d)', optimal:'Yes', complete:'Yes',
+    desc:'A* is the supreme navigator — it combines UCS\'s actual cost with a <b>heuristic estimate</b> (straight-line distance to destination). Formula: <b>f(n) = g(n) + h(n)</b>. Your ship intelligently balances how far it\'s traveled vs. how far it needs to go. The smartest algorithm!',
+    enemy:'A* is hard to fool because it uses spatial reasoning. The enemy ship uses a counter-heuristic strategy — it positions at the node that maximizes the h(n) detour for your ship while minimizing its own exposure. It forces A* off the near-optimal path!'
+  }
+};
+
+function onAlgoChange() {
+  const algo = document.getElementById('algo-select').value;
+  const info = ALGO_INFO[algo];
+  document.getElementById('algo-badge').textContent = info.badge;
+  document.getElementById('info-title').textContent = info.name;
+  document.getElementById('info-complexity').innerHTML =
+    `<span class="badge badge-time">Time: ${info.time}</span>
+     <span class="badge badge-space">Space: ${info.space}</span>
+     <span class="badge badge-optimal">Optimal: ${info.optimal}</span>
+     <span class="badge badge-complete">Complete: ${info.complete}</span>`;
+  document.getElementById('info-desc').innerHTML = info.desc;
+  document.getElementById('dls-control').style.display = algo==='dls'?'flex':'none';
+  if(document.getElementById('enemy-toggle').checked) {
+    document.getElementById('enemy-status-text').textContent = info.enemy;
+  }
+  resetViz();
+}
+
+function onEnemyToggle() {
+  const on = document.getElementById('enemy-toggle').checked;
+  const algo = document.getElementById('algo-select').value;
+  document.getElementById('enemy-status').classList.toggle('active', on);
+  if(on) document.getElementById('enemy-status-text').textContent = ALGO_INFO[algo].enemy;
+  resetViz();
+}
+
+function onNodeSelectChange() { resetViz(); }
+
+// ===== LOG =====
+function clearLog() {
+  document.getElementById('step-log').innerHTML = '';
+}
+function log(msg, cls='') {
+  const el = document.getElementById('step-log');
+  const div = document.createElement('div');
+  div.className = `log-entry ${cls}`;
+  div.innerHTML = msg;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+// ===== STATS =====
+function updateStats(visited, frontier, pathLen, cost) {
+  document.getElementById('stat-visited').textContent = visited;
+  document.getElementById('stat-frontier').textContent = frontier;
+  document.getElementById('stat-path').textContent = pathLen==='—'?'—':pathLen;
+  document.getElementById('stat-cost').textContent = cost==='—'?'—':cost;
+}
+
+// ===== STATUS =====
+function setStatus(msg, state='idle') {
+  document.getElementById('status-msg').textContent = msg;
+  const dot = document.getElementById('status-dot');
+  dot.className = 'status-dot' + (state==='busy'?' busy':state==='error'?' error':'');
+
+}
+
+// ===== SPEED =====
+let stepDelay = 400;
+function onSpeedChange(el) {
+  const v = +el.value;
+  el.style.setProperty('--val', ((v-1)/9*100)+'%');
+  stepDelay = Math.round(1200/(v*1.5));
+}
+onSpeedChange(document.getElementById('speed-slider'));
+
+// ===== RESET =====
+function resetViz() {
+  vizState = { visited:new Set(), frontier:new Set(), pathEdges:[], pathNodes:[], enemyNode:null, blockedEdges:new Set(), currentStep:null, running:false, done:false };
+  clearLog();
+  log('— Awaiting launch sequence —');
+  updateStats(0,0,'—','—');
+  document.getElementById('path-cost-display').classList.remove('show');
+  setStatus('System online. Select algorithm and stars, then launch.');
+  drawGraph();
+}
+
+// ===== ENEMY LOGIC =====
+function computeEnemyMove(src, dst, visited, frontier) {
+  // Enemy uses minimax: pick the node on shortest path that isn't yet visited
+  // Simple heuristic: pick a high-centrality node between src and dst
+  const sp = bfsPath(src, dst);
+  if(!sp) return null;
+  // Enemy tries to sit 40-60% along the path
+  const targetIdx = Math.floor(sp.length * 0.5);
+  for(let i=targetIdx; i<sp.length-1; i++) {
+    if(!visited.has(sp[i]) && sp[i]!==src && sp[i]!==dst) return sp[i];
+  }
+  for(let i=targetIdx-1; i>0; i--) {
+    if(!visited.has(sp[i]) && sp[i]!==src && sp[i]!==dst) return sp[i];
+  }
+  return null;
+}
+
+function bfsPath(s, d) {
+  const q=[s], prev=new Array(NODES.length).fill(-1), seen=new Set([s]);
+  while(q.length){
+    const u=q.shift();
+    if(u===d){
+      const path=[];let cur=d;
+      while(cur!==s){path.unshift(cur);cur=prev[cur];}
+      path.unshift(s);return path;
+    }
+    for(const {to} of adj[u]) if(!seen.has(to)){seen.add(to);prev[to]=u;q.push(to);}
+  }
+  return null;
+}
+
+// ===== ALGORITHMS =====
+async function runAlgorithm() {
+  if(vizState.running) return;
+  const src=+document.getElementById('source-select').value;
+  const dst=+document.getElementById('dest-select').value;
+  if(src===dst){setStatus('Source and destination cannot be the same!','error');return;}
+  const algo=document.getElementById('algo-select').value;
+  const enemyOn=document.getElementById('enemy-toggle').checked;
+  resetViz();
+  vizState.running=true;
+  setStatus(`${ALGO_INFO[algo].name} — Initiating scan from ${NODES[src].name}...`,'busy');
+  clearLog();
+  log(`🚀 Launching from <b style="color:var(--green)">${NODES[src].name}</b> → <b style="color:var(--gold)">${NODES[dst].name}</b>`,'log-found');
+  log(`Algorithm: <b style="color:var(--accent)">${ALGO_INFO[algo].name}</b>`);
+  if(enemyOn) {
+    const em=computeEnemyMove(src,dst,new Set(),new Set());
+    if(em!==null){
+      vizState.enemyNode=em;
+      log(`⚠ Enemy ship deployed at <b style="color:var(--red)">${NODES[em].name}</b>`,'log-enemy');
+      // Block edges adjacent to enemy
+      adj[em].forEach(({to})=>{
+        const key=`${Math.min(em,to)}-${Math.max(em,to)}`;
+        vizState.blockedEdges.add(key);
+      });
+      drawGraph();
+      await sleep(stepDelay);
+    }
+  }
+  let result;
+  switch(algo){
+    case 'bfs': result=await runBFS(src,dst,enemyOn); break;
+    case 'dfs': result=await runDFS(src,dst,enemyOn); break;
+    case 'ucs': result=await runUCS(src,dst,enemyOn); break;
+    case 'dls': result=await runDLS(src,dst,+document.getElementById('dls-depth').value,enemyOn); break;
+    case 'astar': result=await runAStar(src,dst,enemyOn); break;
+  }
+  vizState.running=false;
+  if(result && result.found){
+    setStatus(`Route secured! Path length: ${result.path.length} nodes, Cost: ${result.cost}`, 'done');
+    log(`✅ Destination reached! Cost: <b style="color:var(--gold)">${result.cost}</b>`,'log-found');
+    showPath(result.path, result.cost);
+  } else {
+    setStatus('Navigation failed — destination unreachable!', 'error');
+    log(`❌ Mission failed — no viable route found`,'log-enemy');
+  }
+}
+
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+// BFS
+async function runBFS(src,dst,enemyOn){
+  const queue=[src], visited=new Set([src]), prev=new Array(NODES.length).fill(-1);
+  while(queue.length){
+    vizState.frontier=new Set(queue);
+    updateStats(visited.size,queue.length,'—','—');
+    const u=queue.shift();
+    vizState.currentStep=u;
+    vizState.visited=new Set(visited);
+    drawGraph();
+    log(`🔭 Scanning <b style="color:var(--accent)">${NODES[u].name}</b> | Queue: [${queue.map(x=>NODES[x].name).join(', ')||'empty'}]`,'log-visit');
+    await sleep(stepDelay);
+    if(u===dst){ return buildResult(prev,src,dst,false); }
+    for(const {to} of adj[u]){
+      if(!visited.has(to)){
+        const key=`${Math.min(u,to)}-${Math.max(u,to)}`;
+        if(enemyOn && vizState.blockedEdges.has(key)){ log(`🚫 Route to ${NODES[to].name} blocked by enemy!`,'log-enemy'); continue; }
+        visited.add(to); prev[to]=u; queue.push(to);
+        log(`  ↳ Added <b style="color:var(--accent2)">${NODES[to].name}</b> to frontier`,'log-frontier');
+      }
+    }
+  }
+  return {found:false};
+}
+
+// DFS
+async function runDFS(src,dst,enemyOn){
+  const stack=[src], visited=new Set(), prev=new Array(NODES.length).fill(-1);
+  while(stack.length){
+    const u=stack.pop();
+    if(visited.has(u)) continue;
+    visited.add(u);
+    vizState.visited=new Set(visited);
+    vizState.frontier=new Set(stack);
+    vizState.currentStep=u;
+    updateStats(visited.size,stack.length,'—','—');
+    drawGraph();
+    log(`🔭 Diving into <b style="color:var(--accent)">${NODES[u].name}</b> | Stack depth: ${stack.length}`,'log-visit');
+    await sleep(stepDelay);
+    if(u===dst){ return buildResult(prev,src,dst,false); }
+    const neighbors=[...adj[u]].reverse();
+    for(const {to} of neighbors){
+      if(!visited.has(to)){
+        const key=`${Math.min(u,to)}-${Math.max(u,to)}`;
+        if(enemyOn && vizState.blockedEdges.has(key)){ log(`🚫 Route to ${NODES[to].name} blocked!`,'log-enemy'); continue; }
+        prev[to]=u; stack.push(to);
+      }
+    }
+  }
+  return {found:false};
+}
+
+// UCS — priority queue by cost
+async function runUCS(src,dst,enemyOn){
+  const pq=[{id:src,cost:0}], dist=new Array(NODES.length).fill(Infinity), prev=new Array(NODES.length).fill(-1);
+  dist[src]=0;
+  const visited=new Set();
+  while(pq.length){
+    pq.sort((a,b)=>a.cost-b.cost);
+    vizState.frontier=new Set(pq.map(x=>x.id));
+    const {id:u,cost:cu}=pq.shift();
+    if(visited.has(u)) continue;
+    visited.add(u);
+    vizState.visited=new Set(visited);
+    vizState.currentStep=u;
+    updateStats(visited.size,pq.length,'—',Math.round(cu));
+    drawGraph();
+    log(`💰 Expanding <b style="color:var(--accent)">${NODES[u].name}</b> | Cost so far: <b style="color:var(--orange)">${cu}</b>`,'log-cost');
+    await sleep(stepDelay);
+    if(u===dst){ return buildResult(prev,src,dst,true,cu); }
+    for(const {to,w} of adj[u]){
+      const key=`${Math.min(u,to)}-${Math.max(u,to)}`;
+      if(enemyOn && vizState.blockedEdges.has(key)){ log(`🚫 Route blocked by enemy!`,'log-enemy'); continue; }
+      const nc=cu+w;
+      if(nc<dist[to]){ dist[to]=nc; prev[to]=u; pq.push({id:to,cost:nc}); log(`  ↳ ${NODES[to].name} queued at cost <b style="color:var(--orange)">${nc}</b>`,'log-cost'); }
+    }
+  }
+  return {found:false};
+}
+
+// DLS
+async function runDLS(src,dst,limit,enemyOn){
+  const prev=new Array(NODES.length).fill(-1);
+  const visited=new Set();
+  async function dls(u,depth){
+    if(depth<0) return false;
+    if(visited.has(u)) return false;
+    visited.add(u);
+    vizState.visited=new Set(visited);
+    vizState.currentStep=u;
+    updateStats(visited.size,0,'—','—');
+    drawGraph();
+    log(`🔭 Depth ${limit-depth}: <b style="color:var(--accent)">${NODES[u].name}</b>`,'log-visit');
+    await sleep(stepDelay);
+    if(u===dst) return true;
+    if(depth===0){ log(`  ⛔ Depth limit reached at ${NODES[u].name}`,'log-enemy'); return false; }
+    for(const {to} of adj[u]){
+      const key=`${Math.min(u,to)}-${Math.max(u,to)}`;
+      if(enemyOn && vizState.blockedEdges.has(key)){ log(`🚫 Blocked!`,'log-enemy'); continue; }
+      if(!visited.has(to)){ prev[to]=u; if(await dls(to,depth-1)) return true; }
+    }
+    visited.delete(u);
+    return false;
+  }
+  const found=await dls(src,limit);
+  if(found) return buildResult(prev,src,dst,false);
+  return {found:false};
+}
+
+// A*
+function heuristic(a,b){
+  const na=NODES[a],nb=NODES[b];
+  return Math.round(Math.sqrt((na.x-nb.x)**2+(na.y-nb.y)**2)*20);
+}
+async function runAStar(src,dst,enemyOn){
+  const open=[{id:src,g:0,f:heuristic(src,dst)}];
+  const g=new Array(NODES.length).fill(Infinity), prev=new Array(NODES.length).fill(-1);
+  g[src]=0;
+  const closed=new Set();
+  while(open.length){
+    open.sort((a,b)=>a.f-b.f);
+    vizState.frontier=new Set(open.map(x=>x.id));
+    const {id:u,g:gu}=open.shift();
+    if(closed.has(u)) continue;
+    closed.add(u);
+    vizState.visited=new Set(closed);
+    vizState.currentStep=u;
+    const h=heuristic(u,dst);
+    updateStats(closed.size,open.length,'—',Math.round(gu));
+    drawGraph();
+    log(`⭐ A* exploring <b style="color:var(--accent)">${NODES[u].name}</b> | g=${gu} h=${h} f=${gu+h}`,'log-visit');
+    await sleep(stepDelay);
+    if(u===dst){ return buildResult(prev,src,dst,true,gu); }
+    for(const {to,w} of adj[u]){
+      const key=`${Math.min(u,to)}-${Math.max(u,to)}`;
+      if(enemyOn && vizState.blockedEdges.has(key)){ log(`🚫 Blocked!`,'log-enemy'); continue; }
+      const ng=gu+w, nf=ng+heuristic(to,dst);
+      if(ng<g[to]){ g[to]=ng; prev[to]=u; open.push({id:to,g:ng,f:nf}); log(`  ↳ ${NODES[to].name}: g=${ng} h=${heuristic(to,dst)} f=${nf}`,'log-frontier'); }
+    }
+  }
+  return {found:false};
+}
+
+function buildResult(prev,src,dst,weighted,cost=0){
+  const path=[];let cur=dst;
+  while(cur!==-1){path.unshift(cur);cur=prev[cur];}
+  if(path[0]!==src&&path[path.length-1]!==dst) return {found:false};
+  if(path[0]!==src) return {found:false};
+  vizState.pathNodes=path;
+  for(let i=0;i<path.length-1;i++) vizState.pathEdges.push([path[i],path[i+1]]);
+  vizState.currentStep=null;
+  vizState.frontier=new Set();
+  if(!weighted){ // calc cost
+    cost=0;
+    for(let i=0;i<path.length-1;i++){
+      const e=EDGES.find(([a,b])=>(a===path[i]&&b===path[i+1])||(a===path[i+1]&&b===path[i]));
+      if(e) cost+=e[2];
+    }
+  }
+  drawGraph();
+  updateStats(vizState.visited.size,0,path.length,Math.round(cost));
+  return {found:true,path,cost:Math.round(cost)};
+}
+
+function showPath(path,cost){
+  const el=document.getElementById('path-cost-display');
+  el.classList.add('show');
+  document.getElementById('pcd-route').innerHTML=path.map(id=>`<span style="color:var(--accent)">${NODES[id].name}</span>`).join(' → ');
+  document.getElementById('pcd-total').textContent=`Total Cost: ${cost}`;
+}
+
+// ===== TOOLTIP =====
+cvs.addEventListener('mousemove',e=>{
+  const rect=cvs.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  let hovered=null;
+  NODES.forEach(n=>{
+    const p=nodePos(n);
+    if(Math.hypot(mx-p.x,my-p.y)<n.size+6) hovered=n;
+  });
+  const tip=document.getElementById('tooltip');
+  if(hovered){
+    document.getElementById('tt-name').textContent=hovered.name;
+    document.getElementById('tt-type').textContent=hovered.type.toUpperCase();
+    document.getElementById('tt-edges').textContent=adj[hovered.id].length;
+    const algo=document.getElementById('algo-select').value;
+    const dst=+document.getElementById('dest-select').value;
+    if(algo==='astar'){
+      document.getElementById('tt-hrow').style.display='flex';
+      document.getElementById('tt-hval').textContent=heuristic(hovered.id,dst);
+    } else document.getElementById('tt-hrow').style.display='none';
+    tip.style.display='block';
+    tip.style.left=(e.clientX+14)+'px';
+    tip.style.top=(e.clientY-10)+'px';
+    cvs.style.cursor='pointer';
+  } else {
+    tip.style.display='none';
+    cvs.style.cursor='default';
+  }
+});
+cvs.addEventListener('mouseleave',()=>{ document.getElementById('tooltip').style.display='none'; });
+
+// ===== INIT =====
+populateDropdowns();
+onAlgoChange();
+window.addEventListener('resize', resizeCanvas);
+setTimeout(()=>{ resizeCanvas(); },100);
+</script>
+</body>
+</html>
